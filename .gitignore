@@ -1,0 +1,42 @@
+# Planning / internal docs — kept local, NOT in the portfolio repo
+docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Data — datasets live in S3, never in git
+data/raw/
+data/curated/
+*.csv
+*.tsv
+*.parquet
+*.jsonl
+*.arrow
+
+# Model artifacts
+*.pt
+*.bin
+*.safetensors
+artifacts/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+
+# Secrets / AWS
+.env
+*.pem
+.aws/
+
+# OS / editor
+.DS_Store
+.vscode/

@@ -1,0 +1,16 @@
+# Infra pipeline: terraform plan on PR, apply on merge to main.
+# TODO: configure OIDC role, backend, and terraform steps.
+name: infra
+
+on:
+  pull_request:
+    paths: ["infra/**"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "TODO: checkout, configure AWS creds (OIDC), terraform init/plan/apply"
