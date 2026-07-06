@@ -9,3 +9,4 @@ accelerate
 evaluate
 scikit-learn
 pandas
+torch
