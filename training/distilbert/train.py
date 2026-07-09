@@ -1,9 +1,9 @@
-"""DistilBERT candidate -- low-cost/latency reference (see docs/PLAN.md -> Modelos candidatos)."""
+"""DistilBERT candidate -- the small, fast, cheap reference model."""
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # make `common` importable when run directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # so `common` imports when run directly
 
 from common.train import build_arg_parser, run  # noqa: E402
 

@@ -1,20 +1,20 @@
 """
-Shared fine-tuning entry point used by training/{distilbert,deberta,qwen}/train.py.
+Shared fine-tuning code used by training/{distilbert,deberta,qwen}/train.py.
 
-Kept here instead of duplicated 3x so hyperparameter handling and metrics stay identical across
-the 3-model comparison the README's report depends on (see docs/PLAN.md -> "Modelos candidatos").
-Each per-model script just calls build_arg_parser()/run() with its own checkpoint.
-
-Runs as a SageMaker Training Job with source_dir="training/" so `import common...` resolves as a
-sibling package regardless of which model's train.py is the entry_point.
+Kept in one place so all 3 models train the exact same way -- only the checkpoint changes.
+Each per-model script just calls build_arg_parser()/run() with its own checkpoint. Runs as a
+SageMaker Training Job with source_dir="training/" so `import common...` works.
 """
 
 import argparse
 import json
 import logging
 import os
+from collections import Counter
 from pathlib import Path
 
+import torch
+from torch import nn
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -32,6 +32,38 @@ logger = logging.getLogger(__name__)
 NUM_LABELS = 3
 
 
+def compute_class_weights(train_ds, num_labels: int) -> torch.Tensor:
+    """Inverse-frequency weights (sklearn's 'balanced' formula) for the loss.
+
+    prompt_injection is only ~0.85% of the train set, so without weighting the model would mostly
+    ignore it and still look accurate overall. This makes the loss care about the rare class.
+    """
+    # int() instead of .tolist() -- the newer datasets Column type doesn't have .tolist() and crashed here.
+    counts = Counter(int(x) for x in train_ds["labels"])
+    total = sum(counts.values())
+    weights = [total / (num_labels * counts.get(i, 1)) for i in range(num_labels)]
+    logger.info("Class weights (label -> weight): %s", dict(enumerate(weights)))
+    return torch.tensor(weights, dtype=torch.float)
+
+
+class WeightedTrainer(Trainer):
+    """Trainer with a class-weighted CrossEntropyLoss -- see compute_class_weights()."""
+
+    def __init__(self, *args, class_weights: torch.Tensor, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.class_weights = class_weights
+
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+        # Match logits' device AND dtype -- bf16 models (Qwen) give bf16 logits but class_weights is
+        # float32, so a plain .to(device) leaves a dtype mismatch that crashes.
+        loss_fct = nn.CrossEntropyLoss(weight=self.class_weights.to(device=logits.device, dtype=logits.dtype))
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
+
+
 def build_arg_parser(default_checkpoint: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-checkpoint", default=default_checkpoint)
@@ -46,6 +78,22 @@ def build_arg_parser(default_checkpoint: str) -> argparse.ArgumentParser:
     parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--bf16", action="store_true", help="Mixed-precision training (recommended for Qwen).")
+    parser.add_argument(
+        "--gradient-checkpointing", action="store_true",
+        help="Saves memory at the cost of compute -- needed to fit Qwen on a 24GB GPU.",
+    )
+    parser.add_argument(
+        "--optim", default="adamw_torch",
+        help="Trainer optimizer. 'adafactor' uses much less memory than adamw -- needed for Qwen on 24GB.",
+    )
+    parser.add_argument(
+        "--max-train-samples", type=int, default=None,
+        help="Subsample train set -- for a quick smoke test, not a real run.",
+    )
+    parser.add_argument(
+        "--max-eval-samples", type=int, default=None,
+        help="Subsample val set -- for a quick smoke test, not a real run.",
+    )
     return parser
 
 
@@ -55,16 +103,25 @@ def run(args: argparse.Namespace, model_checkpoint: str | None = None) -> dict:
 
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
     if tokenizer.pad_token is None:
-        # Base causal LMs (e.g. Qwen2.5) usually ship with no pad token; eos doubles as pad
-        # for classification -- attention_mask still hides it from the loss/pooling.
+        # base LMs like Qwen have no pad token; reuse eos (attention_mask still masks it out)
         tokenizer.pad_token = tokenizer.eos_token
 
     model = AutoModelForSequenceClassification.from_pretrained(model_checkpoint, num_labels=NUM_LABELS)
+    if args.gradient_checkpointing:
+        # KV-cache clashes with gradient checkpointing; we don't need it here anyway
+        model.config.use_cache = False
     if model.config.pad_token_id is None:
         model.config.pad_token_id = tokenizer.pad_token_id
 
-    train_ds = tokenize_dataset(load_split(args.train_dir, "train"), tokenizer, args.max_length)
-    val_ds = tokenize_dataset(load_split(args.val_dir, "val"), tokenizer, args.max_length)
+    train_raw = load_split(args.train_dir, "train")
+    val_raw = load_split(args.val_dir, "val")
+    if args.max_train_samples is not None:
+        train_raw = train_raw.select(range(min(len(train_raw), args.max_train_samples)))
+    if args.max_eval_samples is not None:
+        val_raw = val_raw.select(range(min(len(val_raw), args.max_eval_samples)))
+
+    train_ds = tokenize_dataset(train_raw, tokenizer, args.max_length)
+    val_ds = tokenize_dataset(val_raw, tokenizer, args.max_length)
 
     training_args = TrainingArguments(
         output_dir=args.output_data_dir,
@@ -79,10 +136,14 @@ def run(args: argparse.Namespace, model_checkpoint: str | None = None) -> dict:
         logging_steps=50,
         seed=args.seed,
         bf16=args.bf16,
+        gradient_checkpointing=args.gradient_checkpointing,
+        optim=args.optim,
         report_to="none",
     )
 
-    trainer = Trainer(
+    class_weights = compute_class_weights(train_ds, NUM_LABELS)
+    trainer = WeightedTrainer(
+        class_weights=class_weights,
         model=model,
         args=training_args,
         train_dataset=train_ds,

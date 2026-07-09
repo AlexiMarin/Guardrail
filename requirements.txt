@@ -1,5 +1,6 @@
 # Core
-sagemaker
+# Pinned <3 -- v3 rewrote the API and this project uses the classic v2 one.
+sagemaker<3
 boto3
 
 # Data + modeling

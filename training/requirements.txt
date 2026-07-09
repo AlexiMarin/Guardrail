@@ -1,0 +1,7 @@
+# SageMaker installs these into the container before training runs.
+# We use the generic PyTorch DLC (not the HuggingFace one -- it's GPU-only, and we needed a CPU
+# fallback while GPU quota was 0), so transformers/datasets/accelerate aren't preinstalled.
+transformers==4.56.2
+datasets
+accelerate
+scikit-learn

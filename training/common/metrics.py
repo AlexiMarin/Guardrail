@@ -1,8 +1,5 @@
 """
-Metrics shared by training (eval-during-training) and evaluation/evaluate.py's quality gate.
-
-Names here (recall_prompt_injection, recall_jailbreak, false_positive_rate, macro_f1) are the
-ones docs/PLAN.md's quality gate thresholds are defined against -- keep them in sync.
+Metrics used during training and (copied) in evaluation/evaluate.py -- keep the two in sync.
 """
 
 import numpy as np

@@ -1,8 +1,7 @@
 """
 Lambda handler for the public demo.
 
-Sits behind API Gateway and in front of the SageMaker endpoint (the endpoint is never
-exposed directly). Applies throttling / API key at the gateway.
+Sits between API Gateway and the SageMaker endpoint so the endpoint isn't exposed directly.
 
 Request:  {"prompt": "..."}
 Response: {"label": "benign|prompt_injection|jailbreak", "scores": {...}}

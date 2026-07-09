@@ -1,11 +1,8 @@
 """
-SageMaker Pipeline definition for the guardrail project.
+SageMaker Pipeline for the guardrail project.
 
-Flow (see docs/PLAN.md -> Arquitectura MLOps):
-  prep data -> train (DistilBERT | DeBERTa | Qwen, in parallel) -> evaluate
-  -> register in Model Registry -> conditional deploy (only if quality gate passes)
-
-Triggered by the ml.yml CI workflow (workflow_dispatch or code/data change).
+Flow: prep data -> train the 3 models -> evaluate -> register -> deploy only if the gate passes.
+Triggered by the ml.yml CI workflow.
 """
 
 

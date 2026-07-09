@@ -1,0 +1,2 @@
+# torch/transformers/pandas already ship in the DLC; scikit-learn doesn't, so add it here.
+scikit-learn

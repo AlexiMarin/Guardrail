@@ -1,28 +1,29 @@
 """
-Download the guardrail datasets from the Hugging Face Hub and write them to S3.
+Download the benchmark datasets from HuggingFace and save them to S3.
 
-Runs as an ephemeral SageMaker Processing Job — data never touches a local machine.
-See docs/PLAN.md ("Flujo de datos 100% en la nube") for the rationale. The script writes
-to a local output directory; the SageMaker ProcessingOutput config (see pipelines/pipeline.py)
-is responsible for syncing that directory to S3 -- this script has no direct S3 client.
-
-Repo ids, configs, and licenses below were verified against the HF Hub API
-(huggingface.co/api/datasets/<id>) and datasets-server -- see data/schema.md for the
-per-source notes (gating, non-commercial license on ToxicChat, mirrors used for
-HarmBench/XSTest/OR-Bench).
+Runs as a SageMaker Processing Job: writes parquet files locally, SageMaker syncs them to S3.
+Dataset ids and licenses are documented in data/schema.md.
 """
 
 import argparse
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
-from datasets import load_dataset
+# The processing container doesn't ship `datasets` and can't install a requirements.txt,
+# so we grab it at runtime.
+try:
+    from datasets import load_dataset
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "datasets", "pyarrow"])
+    from datasets import load_dataset
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# key -> HF repo id + configs to pull. `configs=None` means "load the default config".
+# repo id + which configs to pull (None = the default config)
 SOURCES = {
     # Attacks
     "jailbreakbench": {
@@ -33,7 +34,8 @@ SOURCES = {
     },
     "harmbench": {
         "repo_id": "walledai/HarmBench",
-        "configs": None,
+        # skip "copyright" — it's about copyright infringement, not jailbreaks
+        "configs": ["standard", "contextual"],
         "gated": True,
         "license": "mit",
     },
@@ -63,9 +65,9 @@ SOURCES = {
         "gated": True,
         "license": "odc-by",
     },
-    # Hard / confusing benign (false-positive control)
+    # Benign-but-scary prompts, to catch false positives
     "xstest": {
-        # Paul/XSTest is the authors' own repo; walledai/XSTest is a gated mirror -- avoid it.
+        # use Paul/XSTest, not the gated walledai mirror
         "repo_id": "Paul/XSTest",
         "configs": None,
         "gated": False,
@@ -77,9 +79,9 @@ SOURCES = {
         "gated": False,
         "license": "cc-by-4.0",
     },
-    # Contrast: ordinary toxicity (not jailbreak)
+    # Plain toxicity (not jailbreak) for contrast
     "toxicchat": {
-        # CC-BY-NC-4.0 -- non-commercial. Fine for this portfolio/demo, not for a revenue product.
+        # non-commercial license — fine for a portfolio, not for a product
         "repo_id": "lmsys/toxic-chat",
         "configs": ["toxicchat0124"],
         "gated": False,
