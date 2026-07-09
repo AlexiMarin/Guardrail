@@ -1,0 +1,5 @@
+# torch ships in the PyTorch DLC; these don't. transformers pinned to the training version so the
+# saved model loads the same way.
+transformers==4.56.2
+onnx
+onnxruntime
