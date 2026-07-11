@@ -23,13 +23,22 @@ data/curated/
 *.pt
 *.bin
 *.safetensors
+*.onnx
 artifacts/
+# quantized model pulled from S3 for the Lambda image build
+inference/model/
 
 # Terraform
 .terraform/
 *.tfstate
 *.tfstate.*
+# real values (the *.tfvars.example placeholders stay committed)
 *.tfvars
+# state bucket/account + local creds -- keep out of the public repo
+infra/backend.hcl
+infra/deploy.env
+# terraform build artifacts (kill_switch.zip etc.) -- regenerated, live under any module's .build/
+.build/
 crash.log
 
 # Secrets / AWS

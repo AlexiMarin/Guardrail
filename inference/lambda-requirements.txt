@@ -1,0 +1,5 @@
+# Runtime deps for the Lambda image. No torch/transformers -- we run the ONNX model with onnxruntime
+# and tokenize with the standalone tokenizers lib, which keeps the image small.
+onnxruntime==1.27.0
+numpy
+tokenizers

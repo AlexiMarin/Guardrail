@@ -1,0 +1,9 @@
+# CORS allow-list
+allowed_origins = ["https://domain.example"]
+
+# Cloudflare Turnstile
+turnstile_secret = ""
+
+# Budget & alerts
+budget_limit_usd = ###
+alert_email      = "you@example.com"

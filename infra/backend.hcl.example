@@ -1,0 +1,6 @@
+# Copy to backend.hcl and fill in. Keeps the bucket/account out of the public repo.
+#   terraform init -backend-config=backend.hcl
+bucket       = "your-terraform-state-bucket"
+key          = "guardrail/terraform.tfstate"
+region       = "us-east-2"
+use_lockfile = true
